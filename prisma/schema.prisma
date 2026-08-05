@@ -1,0 +1,168 @@
+// Signal-Based Outbound Engine — data model
+// SQLite for local dev. Prisma enums aren't supported on the sqlite connector,
+// so status/type fields are String, validated at the application layer with
+// zod (see src/lib/enums.ts) — swapping to Postgres later can promote these
+// to native enums without changing application code.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String
+  domain        String?
+  careersProvider String?   // "greenhouse" | "lever" | null
+  careersSlug     String?   // the board token, e.g. "northwind"
+  monitored     Boolean  @default(true)
+  createdAt     DateTime @default(now())
+
+  signals  Signal[]
+  contacts Contact[]
+
+  @@unique([name, domain])
+}
+
+model Signal {
+  id         String   @id @default(cuid())
+  companyId  String
+  company    Company  @relation(fields: [companyId], references: [id])
+
+  type       String   // "hiring_post" | "funding_round" | "tech_change" | "job_change"
+  sourceName String   // e.g. "greenhouse", "lever", "funding_rss"
+  sourceUrl  String?
+  headline   String
+  rawText    String?
+  score      Int      @default(0)
+  status     String   @default("new") // "new" | "enriching" | "enriched" | "drafted" | "skipped"
+  detectedAt DateTime @default(now())
+
+  enrichmentAttempts EnrichmentAttempt[]
+  drafts             Draft[]
+  enrichedContacts   Contact[]
+
+  @@index([status])
+  @@index([companyId])
+}
+
+model Contact {
+  id          String   @id @default(cuid())
+  companyId   String
+  company     Company  @relation(fields: [companyId], references: [id])
+
+  // Which signal's enrichment produced this contact — lets a failed
+  // drafting step be retried without re-running (and re-paying for) the
+  // enrichment waterfall. Nullable: contacts added by other means won't have one.
+  enrichedFromSignalId String?
+  enrichedFromSignal   Signal? @relation(fields: [enrichedFromSignalId], references: [id])
+
+  fullName    String
+  title       String?
+  email       String?
+  emailStatus String   @default("unverified") // "unverified" | "verified" | "guessed"
+  linkedinUrl String?
+  provider    String?  // which enrichment provider found this contact
+  createdAt   DateTime @default(now())
+
+  drafts   Draft[]
+  meetings Meeting[]
+
+  @@index([companyId])
+  @@index([enrichedFromSignalId])
+}
+
+model EnrichmentAttempt {
+  id        String   @id @default(cuid())
+  signalId  String
+  signal    Signal   @relation(fields: [signalId], references: [id])
+
+  provider  String   // "hunter" | "apollo" | "clay" | "manual"
+  query     String
+  succeeded Boolean
+  summary   String?
+  createdAt DateTime @default(now())
+
+  @@index([signalId])
+}
+
+model Draft {
+  id           String   @id @default(cuid())
+  signalId     String
+  signal       Signal   @relation(fields: [signalId], references: [id])
+  contactId    String
+  contact      Contact  @relation(fields: [contactId], references: [id])
+
+  subject      String
+  body         String
+  groundedFact String   // the specific fact the draft cites, shown to the reviewer
+  model        String   // e.g. "claude-sonnet-5"
+  status       String   @default("pending_approval") // "pending_approval" | "approved" | "rejected" | "edited"
+  reviewerNote String?
+  createdAt    DateTime @default(now())
+  reviewedAt   DateTime?
+
+  sends SendRecord[]
+
+  @@index([status])
+}
+
+model SendRecord {
+  id         String   @id @default(cuid())
+  draftId    String
+  draft      Draft    @relation(fields: [draftId], references: [id])
+
+  provider   String   // "instantly" | "dry_run"
+  externalId String?
+  mailbox    String?
+  status     String   @default("queued") // "queued" | "sent" | "failed"
+  sentAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  replies Reply[]
+
+  @@index([status])
+}
+
+model Reply {
+  id             String   @id @default(cuid())
+  sendRecordId   String
+  sendRecord     SendRecord @relation(fields: [sendRecordId], references: [id])
+
+  rawText        String
+  receivedAt     DateTime @default(now())
+  classification String?  // "interested" | "objection" | "not_now" | "unsubscribe" | "unknown"
+  confidence     Float?
+  routedTo       String?  // "slack" | "human_queue" | "suppressed"
+
+  meeting Meeting?
+
+  @@index([classification])
+}
+
+// A real, enforced suppression list — not just a routedTo label on a Reply.
+// Anyone who unsubscribes goes here, and every draft attempt checks this
+// table before a Draft is ever created, so a contact can't get re-drafted-to
+// on a later signal run. This is a compliance requirement for a real
+// outbound tool, not an optional nicety.
+model Suppression {
+  email     String   @id
+  reason    String   // "unsubscribe" | "manual"
+  createdAt DateTime @default(now())
+}
+
+model Meeting {
+  id          String   @id @default(cuid())
+  replyId     String   @unique
+  reply       Reply    @relation(fields: [replyId], references: [id])
+  contactId   String
+  contact     Contact  @relation(fields: [contactId], references: [id])
+
+  scheduledAt DateTime
+  bookedVia   String   @default("cal.com")
+  createdAt   DateTime @default(now())
+}
