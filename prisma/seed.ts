@@ -1,9 +1,13 @@
 import "dotenv/config";
 import { PrismaClient } from "../src/generated/prisma/client";
-import { PrismaBetterSqlite3 } from "@prisma/adapter-better-sqlite3";
+import { PrismaLibSql } from "@prisma/adapter-libsql";
 
-const sqliteUrl = (process.env.DATABASE_URL ?? "file:./dev.db").replace(/^file:/, "");
-const db = new PrismaClient({ adapter: new PrismaBetterSqlite3({ url: sqliteUrl }) });
+const db = new PrismaClient({
+  adapter: new PrismaLibSql({
+    url: process.env.DATABASE_URL ?? "file:./dev.db",
+    authToken: process.env.DATABASE_AUTH_TOKEN,
+  }),
+});
 
 // Real, currently-live public job boards (verified against the actual
 // Greenhouse/Lever public APIs while building this) — good enough to prove
