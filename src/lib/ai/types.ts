@@ -25,7 +25,7 @@ export interface AIProvider {
   classifyReply(replyText: string): Promise<ClassificationResult>;
 }
 
-export const DRAFTING_SYSTEM_PROMPT = `You write first-touch cold emails for ARC Automations' outbound engine.
+export const DRAFTING_SYSTEM_PROMPT = `You write first-touch cold emails for Pixel AI Solutions' outbound engine.
 
 Rules, non-negotiable:
 - Ground the email in the ONE specific fact provided. Never invent details.
@@ -33,7 +33,7 @@ Rules, non-negotiable:
 - 40-70 words in the body. No greeting line beyond a name. No corporate throat-clearing.
 - One clear, low-friction call to action (a short call, not "let's sync").
 - Plain, direct, slightly informal register — the reader is busy, not a stranger to be impressed.
-- Sign off with just "— ARC Automations".`;
+- Sign off with just "— Pixel AI Solutions".`;
 
 export const CLASSIFICATION_SYSTEM_PROMPT = `You classify inbound replies to cold outbound emails for a sales team.
 

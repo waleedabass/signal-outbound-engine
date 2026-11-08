@@ -54,3 +54,7 @@ skills-lock.json
 
 .vercel
 .env*
+
+.next-docs/
+next-docs.tgz
+node_modules.partial*/

@@ -63,7 +63,7 @@ DEPLOYMENT
   approvals, and replies pages.
 
 BRANDING
-- Replace the ARC Automations palette/logo in src/app/globals.css and
+- Replace the Pixel AI Solutions palette/logo in src/app/globals.css and
   src/app/layout.tsx with [CLIENT_NAME]'s brand colors and logo.
 
 Test the full pipeline live against real target accounts before handoff:
@@ -161,3 +161,10 @@ An average outbound tool sends a templated sequence to a purchased list. This sy
 4. Approve and send (or show the log-only send in a sandbox).
 5. Simulate a reply and show it auto-classified and routed.
 6. Show the contact appearing in the CRM and, if a meeting was booked, the Cal.com webhook firing.
+
+
+## Public Pixel sample
+
+The public entry and `/demo` run editable, browser-isolated sample workflows. No live email, payment, CRM update or paid AI request is made. Records reset on reload. Existing provider integrations remain available behind explicit private access. Set `ENABLE_LIVE_DEMO=true`, `DATABASE_URL` and a private `PIXEL_LIVE_ACCESS_TOKEN` of at least 32 characters; authenticate internal requests using the `pixel-live-access` cookie or a Bearer header. Keep provider keys server-side. Public POSTs and APIs are blocked. Do not enable integration mode for anonymous visitors.
+
+Run `npm ci`, `npm test`, `npm run lint`, and `npm run build`. Production uses the linked Vercel project.

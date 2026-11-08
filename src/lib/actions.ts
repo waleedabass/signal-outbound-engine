@@ -1,5 +1,8 @@
 "use server";
 
+import { requireLiveAccess } from "@/lib/live-access";
+
+import { sendBlockReason } from "@/lib/workflow-validation";
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db";
 import { runSignalScan } from "@/lib/signals/ingest";
@@ -10,12 +13,14 @@ import { postToSlack } from "@/lib/notify/slack";
 import { upsertHubSpotContact } from "@/lib/crm/hubspot";
 
 export async function runScanAction(): Promise<void> {
+  await requireLiveAccess();
   await runSignalScan();
   revalidatePath("/pipeline");
   revalidatePath("/");
 }
 
 export async function enrichAndDraftAction(signalId: string): Promise<void> {
+  await requireLiveAccess();
   const signal = await db.signal.findUniqueOrThrow({ where: { id: signalId }, include: { company: true } });
 
   // If enrichment already succeeded on a prior attempt (e.g. drafting failed
@@ -82,6 +87,9 @@ export async function enrichAndDraftAction(signalId: string): Promise<void> {
 }
 
 export async function saveDraftEditAction(draftId: string, formData: FormData) {
+  await requireLiveAccess();
+  const existing=await db.draft.findUniqueOrThrow({where:{id:draftId},include:{sends:true}});
+  if(existing.status==="approved"||existing.sends.some(x=>x.status==="sent"))throw new Error("Approved or sent drafts cannot be reopened automatically.");
   const subject = String(formData.get("subject") ?? "");
   const body = String(formData.get("body") ?? "");
   await db.draft.update({
@@ -92,6 +100,9 @@ export async function saveDraftEditAction(draftId: string, formData: FormData) {
 }
 
 export async function rejectDraftAction(draftId: string, reviewerNote?: string) {
+  await requireLiveAccess();
+  const existing=await db.draft.findUniqueOrThrow({where:{id:draftId},include:{sends:true}});
+  if(existing.status==="approved"||existing.sends.some(x=>x.status==="sent"))throw new Error("Approved or sent drafts cannot be reopened automatically.");
   await db.draft.update({
     where: { id: draftId },
     data: { status: "rejected", reviewedAt: new Date(), reviewerNote },
@@ -100,23 +111,23 @@ export async function rejectDraftAction(draftId: string, reviewerNote?: string) 
 }
 
 export async function approveAndSendAction(draftId: string): Promise<void> {
-  const draft = await db.draft.findUniqueOrThrow({
-    where: { id: draftId },
-    include: { contact: true },
-  });
-
-  await db.draft.update({ where: { id: draftId }, data: { status: "approved", reviewedAt: new Date() } });
-
-  if (!draft.contact.email) {
-    throw new Error("Contact has no email on file — cannot send.");
-  }
+  await requireLiveAccess();
+  const draft=await db.draft.findUniqueOrThrow({where:{id:draftId},include:{contact:true,sends:true}});
+  const email=draft.contact.email;
+  const suppression=email?await db.suppression.findUnique({where:{email}}):null;
+  const reason=sendBlockReason({status:draft.status,email,subject:draft.subject,body:draft.body,suppressed:Boolean(suppression),sent:draft.sends.some(x=>x.status==='sent'||x.status==='queued')});
+  if(reason)throw new Error(reason);
+  if(!email)throw new Error('Contact email is required.');
+  const claimed=await db.draft.updateMany({where:{id:draftId,status:{in:['pending_approval','edited']}},data:{status:'approved',reviewedAt:new Date()}});
+  if(claimed.count!==1)throw new Error('This draft has already been approved or sent.');
+  if(await db.suppression.findUnique({where:{email}}))throw new Error('This contact is suppressed. Sending is blocked.');
 
   const provider = getSendProvider();
   const [firstName, ...rest] = draft.contact.fullName.split(" ");
 
   try {
     const result = await provider.send({
-      toEmail: draft.contact.email,
+      toEmail: email,
       firstName,
       lastName: rest.join(" "),
       subject: draft.subject,
@@ -147,6 +158,7 @@ export async function approveAndSendAction(draftId: string): Promise<void> {
 // wired up — runs the exact same classify → route → notify path a real
 // inbound webhook would trigger. See /api/webhooks/instantly/reply for that.
 export async function simulateReplyAction(sendRecordId: string, formData: FormData): Promise<void> {
+  await requireLiveAccess();
   const rawText = String(formData.get("replyText") ?? "");
   await processInboundReply(sendRecordId, rawText);
   revalidatePath("/replies");
@@ -154,6 +166,7 @@ export async function simulateReplyAction(sendRecordId: string, formData: FormDa
 }
 
 export async function processInboundReply(sendRecordId: string, rawText: string) {
+  await requireLiveAccess();
   const classification = await getAIProvider().classifyReply(rawText);
 
   const routedTo: string =
@@ -208,6 +221,7 @@ export async function processInboundReply(sendRecordId: string, rawText: string)
 }
 
 export async function bookMeetingAction(replyId: string, formData: FormData) {
+  await requireLiveAccess();
   const scheduledAtISO = String(formData.get("scheduledAt") ?? "");
   const reply = await db.reply.findUniqueOrThrow({
     where: { id: replyId },

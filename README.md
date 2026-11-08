@@ -1,6 +1,6 @@
 # Signal-Based Outbound Engine
 
-A working prototype of ARC Automations' signal-based outbound pipeline: real
+A working prototype of Pixel AI Solutions' signal-based outbound pipeline: real
 hiring/funding signal ingestion → waterfall enrichment → Claude-drafted,
 human-approved email → send → reply classification → routing → dashboard.
 
@@ -59,7 +59,7 @@ extra SDK dependency). Set `AI_PROVIDER=anthropic` or `AI_PROVIDER=gemini`
 to pick one explicitly, or leave it unset to auto-detect from whichever key
 is present. Gemini's free tier (aistudio.google.com/apikey, no card) is the
 lowest-friction way for anyone cloning this repo to try it end-to-end for
-$0 — that mattered given this is meant to be run by people other than ARC.
+$0 — that mattered given this is meant to be run by people other than Pixel AI Solutions.
 
 `GEMINI_MODEL` defaults to `gemini-3.6-flash`; if Google has renamed the
 current fast model by the time you're reading this, override the env var
@@ -144,3 +144,10 @@ insert a row via Prisma Studio (`npx prisma studio`) or extend `prisma/seed.ts`.
   real test once you have a `GEMINI_API_KEY` in hand.
 - Domain-guessing for funding-round companies (`guessDomain` in
   `fundingRss.ts`) is a first guess, not a lookup — same reasoning.
+
+
+## Public Pixel sample
+
+The public entry and `/demo` run editable, browser-isolated sample workflows. No live email, payment, CRM update or paid AI request is made. Records reset on reload. Existing provider integrations remain available behind explicit private access. Set `ENABLE_LIVE_DEMO=true`, `DATABASE_URL` and a private `PIXEL_LIVE_ACCESS_TOKEN` of at least 32 characters; authenticate internal requests using the `pixel-live-access` cookie or a Bearer header. Keep provider keys server-side. Public POSTs and APIs are blocked. Do not enable integration mode for anonymous visitors.
+
+Run `npm ci`, `npm test`, `npm run lint`, and `npm run build`. Production uses the linked Vercel project.
